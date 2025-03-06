@@ -28,8 +28,6 @@ if (process.env.NODE_ENV != 'production') {
 
 mongoose.set('strictQuery', false);
 mongoose.connect(process.env.DATABASE_URL, {
-        useNewUrlParser: true,
-        useUnifiedTopology: true
     })
     .then(() => {
         console.log("Connected to MongoDB");
@@ -449,46 +447,44 @@ async function therapistHasActiveSession(therapistInfo) {
  * This get route looks for all users with the type "therapist" and returns
  * the therapist that do not have an active session as an array.
  */
-app.get('/getTherapists', (req, res) => {
-    User.find({
-        userType: "therapist"
-    }, async function (err, user) {
-        if (err) console.log(err)
-        if (user) {
-            var existingSession;
-            for (let i = 0; i < user.length; i++) {
-                existingSession = await therapistHasActiveSession(user[i])
-                if (existingSession) {
-                    user.splice(i, 1);
-                }
-            }
-            return res.json(user)
-        }
-    }).sort({
-        numSessions: 'desc'
-    })
-})
+app.get('/getTherapists', async (req, res) => {
+    try {
+        let users = await User.find({ userType: "therapist" }).sort({ numSessions: 'desc' });
 
+        let filteredUsers = [];
+        for (let i = 0; i < users.length; i++) {
+            let existingSession = await therapistHasActiveSession(users[i]);
+            if (!existingSession) {
+                filteredUsers.push(users[i]);
+            }
+        }
+
+        res.json(filteredUsers);
+    } catch (err) {
+        console.error(err);
+        res.status(500).send("Server error");
+    }
+});
 /**
  * This post route verifies the users email and password when logging in
  * If the user has an invalid email, it will return "NoEmailExists", return
  * user to login if an error occurs or calls auth (a helper function which checks the users password)
  */
 app.post('/login', async (req, res) => {
-    User.findOne({
-        email: req.body.email.toLowerCase()
-    }, function (err, user) {
-        if (err) {
-            console.log(err);
-            res.redirect('/login');
-        }
+    try {
+        const user = await User.findOne({ email: req.body.email.toLowerCase() });
+
         if (!user) {
-            res.json("NoEmailExist");
+            return res.json("NoEmailExist");
         } else {
             return auth(req, res, user);
         }
-    });
-})
+    } catch (err) {
+        console.error(err);
+        res.redirect('/login');
+    }
+});
+
 
 /**
  * 
